@@ -1,0 +1,279 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Core schema (mirrors starter_schema.sql) ───────────────────────────────
+
+model Property {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name      String   @unique @db.VarChar(255)
+  address   String?  @db.VarChar(500)
+  city      String?  @db.VarChar(100)
+  state     String?  @db.VarChar(2)
+  zipCode   String?  @map("zip_code") @db.VarChar(10)
+  status    String   @default("active") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  unitTypes         UnitType[]
+  units             Unit[]
+  residents         Resident[]
+  leases            Lease[]
+  residentLedger    ResidentLedger[]
+  renewalOffers     RenewalOffer[]
+  renewalRiskScores RenewalRiskScore[]
+  webhookDeliveries WebhookDeliveryLog[]
+
+  @@index([status])
+  @@map("properties")
+}
+
+model UnitType {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  propertyId    String   @map("property_id") @db.Uuid
+  name          String   @db.VarChar(100)
+  bedrooms      Int?
+  bathrooms     Decimal? @db.Decimal(3, 1)
+  squareFootage Int?     @map("square_footage")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  property Property @relation(fields: [propertyId], references: [id])
+  units    Unit[]
+
+  @@unique([propertyId, name])
+  @@map("unit_types")
+}
+
+model Unit {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  propertyId   String   @map("property_id") @db.Uuid
+  unitTypeId   String   @map("unit_type_id") @db.Uuid
+  unitNumber   String   @map("unit_number") @db.VarChar(50)
+  floor        Int?
+  status       String   @default("available") @db.VarChar(50)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  property  Property    @relation(fields: [propertyId], references: [id])
+  unitType  UnitType    @relation(fields: [unitTypeId], references: [id])
+  pricing   UnitPricing[]
+  residents Resident[]
+  leases    Lease[]
+
+  @@unique([propertyId, unitNumber])
+  @@index([propertyId])
+  @@index([status])
+  @@map("units")
+}
+
+model UnitPricing {
+  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  unitId        String   @map("unit_id") @db.Uuid
+  baseRent      Decimal  @map("base_rent") @db.Decimal(10, 2)
+  marketRent    Decimal  @map("market_rent") @db.Decimal(10, 2)
+  effectiveDate DateTime @map("effective_date") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  unit Unit @relation(fields: [unitId], references: [id])
+
+  @@unique([unitId, effectiveDate])
+  @@index([unitId])
+  @@index([effectiveDate])
+  @@map("unit_pricing")
+}
+
+model Resident {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  propertyId  String    @map("property_id") @db.Uuid
+  unitId      String    @map("unit_id") @db.Uuid
+  firstName   String    @map("first_name") @db.VarChar(100)
+  lastName    String    @map("last_name") @db.VarChar(100)
+  email       String?   @db.VarChar(255)
+  phone       String?   @db.VarChar(20)
+  status      String    @default("active") @db.VarChar(50)
+  moveInDate  DateTime? @map("move_in_date") @db.Date
+  moveOutDate DateTime? @map("move_out_date") @db.Date
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  property          Property           @relation(fields: [propertyId], references: [id])
+  unit              Unit               @relation(fields: [unitId], references: [id])
+  leases            Lease[]
+  residentLedger    ResidentLedger[]
+  renewalOffers     RenewalOffer[]
+  renewalRiskScores RenewalRiskScore[]
+  webhookDeliveries WebhookDeliveryLog[]
+
+  @@index([propertyId])
+  @@index([unitId])
+  @@index([status])
+  @@map("residents")
+}
+
+model Lease {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  propertyId     String   @map("property_id") @db.Uuid
+  residentId     String   @map("resident_id") @db.Uuid
+  unitId         String   @map("unit_id") @db.Uuid
+  leaseStartDate DateTime @map("lease_start_date") @db.Date
+  leaseEndDate   DateTime @map("lease_end_date") @db.Date
+  monthlyRent    Decimal  @map("monthly_rent") @db.Decimal(10, 2)
+  leaseType      String   @default("fixed") @map("lease_type") @db.VarChar(50)
+  status         String   @default("active") @db.VarChar(50)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  property          Property           @relation(fields: [propertyId], references: [id])
+  resident          Resident           @relation(fields: [residentId], references: [id])
+  unit              Unit               @relation(fields: [unitId], references: [id])
+  renewalOffers     RenewalOffer[]
+  renewalRiskScores RenewalRiskScore[]
+
+  @@index([propertyId])
+  @@index([residentId])
+  @@index([leaseEndDate])
+  @@index([status])
+  @@map("leases")
+}
+
+model ResidentLedger {
+  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  propertyId      String   @map("property_id") @db.Uuid
+  residentId      String   @map("resident_id") @db.Uuid
+  transactionType String   @map("transaction_type") @db.VarChar(50)
+  chargeCode      String?  @map("charge_code") @db.VarChar(100)
+  amount          Decimal  @db.Decimal(10, 2)
+  transactionDate DateTime @map("transaction_date") @db.Date
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  property Property @relation(fields: [propertyId], references: [id])
+  resident Resident @relation(fields: [residentId], references: [id])
+
+  @@index([propertyId])
+  @@index([residentId])
+  @@index([transactionDate])
+  @@index([transactionType])
+  @@map("resident_ledger")
+}
+
+model RenewalOffer {
+  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  propertyId         String    @map("property_id") @db.Uuid
+  residentId         String    @map("resident_id") @db.Uuid
+  leaseId            String    @map("lease_id") @db.Uuid
+  renewalStartDate   DateTime  @map("renewal_start_date") @db.Date
+  renewalEndDate     DateTime? @map("renewal_end_date") @db.Date
+  proposedRent       Decimal?  @map("proposed_rent") @db.Decimal(10, 2)
+  offerExpirationDate DateTime? @map("offer_expiration_date") @db.Date
+  status             String    @default("pending") @map("status") @db.VarChar(50)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  property Property @relation(fields: [propertyId], references: [id])
+  resident Resident @relation(fields: [residentId], references: [id])
+  lease    Lease    @relation(fields: [leaseId], references: [id])
+
+  @@index([propertyId])
+  @@index([residentId])
+  @@index([status])
+  @@map("renewal_offers")
+}
+
+// ─── Candidate tables ────────────────────────────────────────────────────────
+
+model RenewalRiskScore {
+  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  propertyId   String   @map("property_id") @db.Uuid
+  residentId   String   @map("resident_id") @db.Uuid
+  leaseId      String   @map("lease_id") @db.Uuid
+  riskScore    Int      @map("risk_score")
+  riskTier     String   @map("risk_tier") @db.VarChar(10)
+  calculatedAt DateTime @map("calculated_at")
+  asOfDate     DateTime @map("as_of_date") @db.Date
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  property  Property   @relation(fields: [propertyId], references: [id])
+  resident  Resident   @relation(fields: [residentId], references: [id])
+  lease     Lease      @relation(fields: [leaseId], references: [id])
+  signals   RiskSignal?
+
+  // One score per resident per calculation date
+  @@unique([residentId, asOfDate])
+  // Primary query pattern: property + date, sorted
+  @@index([propertyId, asOfDate(sort: Desc)])
+  // Resident-level history
+  @@index([residentId, calculatedAt(sort: Desc)])
+  // Dashboard filter by tier
+  @@index([propertyId, riskTier])
+  @@map("renewal_risk_scores")
+}
+
+model RiskSignal {
+  id                       String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  riskScoreId              String   @unique @map("risk_score_id") @db.Uuid
+  propertyId               String   @map("property_id") @db.Uuid
+  residentId               String   @map("resident_id") @db.Uuid
+  daysToExpiry             Int      @map("days_to_expiry")
+  paymentHistoryDelinquent Boolean  @map("payment_history_delinquent")
+  noRenewalOfferYet        Boolean  @map("no_renewal_offer_yet")
+  rentGrowthAboveMarket    Boolean  @map("rent_growth_above_market")
+  currentRent              Decimal  @map("current_rent") @db.Decimal(10, 2)
+  marketRent               Decimal? @map("market_rent") @db.Decimal(10, 2)
+  rentDeltaPct             Decimal? @map("rent_delta_pct") @db.Decimal(5, 2)
+  recordedAt               DateTime @default(now()) @map("recorded_at")
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  riskScore RenewalRiskScore @relation(fields: [riskScoreId], references: [id], onDelete: Cascade)
+
+  @@index([riskScoreId])
+  @@map("risk_signals")
+}
+
+model WebhookDeliveryLog {
+  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  eventId          String    @unique @map("event_id") @db.VarChar(255)
+  propertyId       String    @map("property_id") @db.Uuid
+  residentId       String    @map("resident_id") @db.Uuid
+  eventType        String    @map("event_type") @db.VarChar(100)
+  payload          Json      @map("payload")
+  status           String    @default("pending") @map("status") @db.VarChar(20)
+  attemptCount     Int       @default(0) @map("attempt_count")
+  lastAttemptAt    DateTime? @map("last_attempt_at")
+  nextRetryAt      DateTime? @map("next_retry_at")
+  rmsResponseStatus Int?     @map("rms_response_status")
+  rmsResponseBody  String?   @map("rms_response_body") @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  property      Property                  @relation(fields: [propertyId], references: [id])
+  resident      Resident                  @relation(fields: [residentId], references: [id])
+  deadLetter    WebhookDeadLetterQueue?
+
+  // Critical for retry poller
+  @@index([status, nextRetryAt])
+  // Dashboard webhook history
+  @@index([propertyId, createdAt(sort: Desc)])
+  @@map("webhook_delivery_log")
+}
+
+model WebhookDeadLetterQueue {
+  id                   String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  webhookDeliveryLogId String   @unique @map("webhook_delivery_log_id") @db.Uuid
+  reason               String   @db.Text
+  movedAt              DateTime @default(now()) @map("moved_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  // NO ACTION — keep DLQ entries even if delivery log is cleaned up (audit trail)
+  webhookDeliveryLog WebhookDeliveryLog @relation(fields: [webhookDeliveryLogId], references: [id])
+
+  @@map("webhook_dead_letter_queue")
+}

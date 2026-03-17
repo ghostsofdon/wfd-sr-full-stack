@@ -1,0 +1,56 @@
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+backend/node_modules/
+frontend/node_modules/
+# ─── Environment & Secrets ────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Build Output ─────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+
+# ─── TypeScript ───────────────────────────────────────────────────────────────
+*.tsbuildinfo
+
+# ─── Prisma ───────────────────────────────────────────────────────────────────
+# Keep migrations and schema; ignore generated client
+backend/node_modules/.prisma/
+backend/prisma/generated/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+
+# ─── Coverage & Testing ───────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+# ─── OS / Editor ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/settings.json
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+# Keep docker-compose.yml tracked; ignore local overrides
+docker-compose.override.yml
+
+# ─── Vite / Frontend ──────────────────────────────────────────────────────────
+frontend/dist/
+frontend/.vite/
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+.cache/
+tmp/

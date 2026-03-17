@@ -1,0 +1,166 @@
+import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
+import { prisma } from '../lib/prisma';
+import { runBatchScoring } from '../services/batchScoring';
+import { createError } from '../middleware/errorHandler';
+
+export const renewalRiskRouter = Router();
+
+// ─── POST /api/v1/properties/:propertyId/renewal-risk/batch ──────────────────
+const BatchQuerySchema = z.object({
+  as_of_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'as_of_date must be YYYY-MM-DD')
+    .optional(),
+});
+
+renewalRiskRouter.post(
+  '/properties/:propertyId/renewal-risk/batch',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const propertyId = req.params['propertyId'] as string;
+      const parsed = BatchQuerySchema.parse(req.query);
+      const asOfDate = parsed.as_of_date ? new Date(parsed.as_of_date) : undefined;
+
+      const property = await prisma.property.findUnique({ where: { id: propertyId } });
+      if (!property) {
+        return next(createError(`Property ${propertyId} not found`, 404, 'PROPERTY_NOT_FOUND'));
+      }
+
+      const summary = await runBatchScoring(propertyId, asOfDate);
+
+      return res.status(202).json({
+        message: 'Batch scoring completed',
+        property_id: propertyId,
+        as_of_date: (asOfDate ?? new Date()).toISOString().split('T')[0],
+        ...summary,
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ─── GET /api/v1/properties/:propertyId/renewal-risk ─────────────────────────
+const ListQuerySchema = z.object({
+  tier: z.enum(['high', 'medium', 'low']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  as_of_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'as_of_date must be YYYY-MM-DD')
+    .optional(),
+});
+
+renewalRiskRouter.get(
+  '/properties/:propertyId/renewal-risk',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const propertyId = req.params['propertyId'] as string;
+      const query = ListQuerySchema.parse(req.query);
+
+      const property = await prisma.property.findUnique({ where: { id: propertyId } });
+      if (!property) {
+        return next(createError(`Property ${propertyId} not found`, 404, 'PROPERTY_NOT_FOUND'));
+      }
+
+      const asOfDate = query.as_of_date ? new Date(query.as_of_date) : undefined;
+
+      const whereClause = {
+        propertyId,
+        ...(query.tier ? { riskTier: query.tier } : {}),
+        ...(asOfDate ? { asOfDate } : {}),
+      };
+
+      const [scores, total] = await Promise.all([
+        prisma.renewalRiskScore.findMany({
+          where: whereClause,
+          orderBy: [{ riskScore: 'desc' }, { calculatedAt: 'desc' }],
+          skip: query.offset,
+          take: query.limit,
+          include: {
+            resident: {
+              select: { id: true, firstName: true, lastName: true, email: true, unitId: true },
+            },
+            signals: true,
+          },
+        }),
+        prisma.renewalRiskScore.count({ where: whereClause }),
+      ]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return res.json({
+        property_id: propertyId,
+        total,
+        limit: query.limit,
+        offset: query.offset,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        results: scores.map((s: any) => ({
+          id: s.id,
+          resident_id: s.residentId,
+          resident_name: `${s.resident.firstName as string} ${s.resident.lastName as string}`,
+          resident_email: s.resident.email,
+          unit_id: s.resident.unitId,
+          risk_score: s.riskScore,
+          risk_tier: s.riskTier,
+          calculated_at: s.calculatedAt,
+          as_of_date: s.asOfDate,
+          signals: s.signals
+            ? {
+                days_to_expiry: s.signals.daysToExpiry,
+                payment_history_delinquent: s.signals.paymentHistoryDelinquent,
+                no_renewal_offer_yet: s.signals.noRenewalOfferYet,
+                rent_growth_above_market: s.signals.rentGrowthAboveMarket,
+                current_rent: Number(s.signals.currentRent),
+                market_rent: s.signals.marketRent ? Number(s.signals.marketRent) : null,
+                rent_delta_pct: s.signals.rentDeltaPct ? Number(s.signals.rentDeltaPct) : null,
+              }
+            : null,
+        })),
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ─── GET /api/v1/properties/:propertyId/renewal-risk/residents/:residentId ────
+renewalRiskRouter.get(
+  '/properties/:propertyId/renewal-risk/residents/:residentId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const propertyId = req.params['propertyId'] as string;
+      const residentId = req.params['residentId'] as string;
+
+      const scores = await prisma.renewalRiskScore.findMany({
+        where: { propertyId, residentId },
+        orderBy: { calculatedAt: 'desc' },
+        take: 30,
+        include: { signals: true, resident: true, lease: true },
+      });
+
+      if (scores.length === 0) {
+        return next(
+          createError(`No risk scores found for resident ${residentId}`, 404, 'NOT_FOUND')
+        );
+      }
+
+      return res.json({
+        resident_id: residentId,
+        property_id: propertyId,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        history: scores.map((s: any) => ({
+          id: s.id,
+          risk_score: s.riskScore,
+          risk_tier: s.riskTier,
+          calculated_at: s.calculatedAt,
+          as_of_date: s.asOfDate,
+          signals: s.signals,
+          lease_end_date: s.lease.leaseEndDate,
+        })),
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
