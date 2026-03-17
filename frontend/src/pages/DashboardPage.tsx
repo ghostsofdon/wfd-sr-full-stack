@@ -9,7 +9,7 @@ import {
   ShieldAlert,
   Filter,
 } from 'lucide-react';
-import { useRenewalRisk, useCalculateRisk } from '../hooks/useRenewalRisk';
+import { useRenewalRisk, useRunBatchScoring } from '../hooks/useRenewalRisk';
 import { ResidentRow } from '../components/ResidentRow';
 import { StatCard } from '../components/StatCard';
 import type { RiskTier } from '../types/api';
@@ -23,22 +23,27 @@ type TierFilter = 'all' | RiskTier;
 
 export function DashboardPage() {
   const [filter, setFilter] = useState<TierFilter>('all');
-  const [lastCalcAt, setLastCalcAt] = useState<string | null>(null);
+  const [lastBatchAt, setLastBatchAt] = useState<string | null>(null);
 
   const { data, isLoading, isError, error } = useRenewalRisk(PROPERTY_ID || null);
-  const { mutate: calculate, isPending: isCalculating } = useCalculateRisk(PROPERTY_ID);
+  const { mutate: runBatch, isPending: isCalculating } = useRunBatchScoring(PROPERTY_ID);
 
   const handleCalculate = () => {
-    calculate(undefined, {
-      onSuccess: (result) => setLastCalcAt(result.calculatedAt),
+    runBatch(undefined, {
+      onSuccess: (result) => setLastBatchAt(result.asOfDate),
     });
   };
 
-  const filteredFlags = (data?.flags ?? []).filter(
-    (f) => filter === 'all' || f.riskTier === filter
-  );
+  // Derive stats from the paginated results list
+  const results = data?.results ?? [];
+  const totalScored = data?.total ?? 0;
+  const highCount = results.filter((r) => r.riskTier === 'high').length;
+  const mediumCount = results.filter((r) => r.riskTier === 'medium').length;
+  const atRiskCount = results.filter((r) => r.riskTier !== 'low').length;
 
-  const calculatedAt = data?.calculatedAt ?? lastCalcAt;
+  const filteredResults = results.filter(
+    (r) => filter === 'all' || r.riskTier === filter
+  );
 
   if (!PROPERTY_ID) {
     return (
@@ -62,11 +67,11 @@ export function DashboardPage() {
               <h1 className="text-lg font-bold text-slate-900 leading-tight">
                 Renewal Risk Dashboard
               </h1>
-              {calculatedAt && (
+              {lastBatchAt && (
                 <p className="text-xs text-slate-400">
-                  Last calculated:{' '}
-                  {new Date(calculatedAt).toLocaleString('en-US', {
-                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                  Last scored:{' '}
+                  {new Date(lastBatchAt).toLocaleString('en-US', {
+                    month: 'short', day: 'numeric',
                   })}
                 </p>
               )}
@@ -122,27 +127,27 @@ export function DashboardPage() {
             <section aria-label="Summary statistics">
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <StatCard
-                  label="Total Residents"
-                  value={data.totalResidents}
+                  label="Total Scored"
+                  value={totalScored}
                   icon={<Building2 className="h-6 w-6" />}
                   accent="blue"
                 />
                 <StatCard
                   label="At-Risk"
-                  value={data.flaggedCount}
+                  value={atRiskCount}
                   icon={<ShieldAlert className="h-6 w-6" />}
                   accent="red"
-                  subtitle={`${Math.round((data.flaggedCount / Math.max(data.totalResidents, 1)) * 100)}% of total`}
+                  subtitle={`${Math.round((atRiskCount / Math.max(results.length, 1)) * 100)}% of page`}
                 />
                 <StatCard
                   label="High Risk"
-                  value={data.riskTiers.high}
+                  value={highCount}
                   icon={<AlertTriangle className="h-6 w-6" />}
                   accent="red"
                 />
                 <StatCard
                   label="Medium Risk"
-                  value={data.riskTiers.medium}
+                  value={mediumCount}
                   icon={<TrendingUp className="h-6 w-6" />}
                   accent="amber"
                 />
@@ -157,8 +162,8 @@ export function DashboardPage() {
                   {(['all', ...TIER_ORDER] as const).map((tier) => {
                     const count =
                       tier === 'all'
-                        ? data.flags.length
-                        : data.flags.filter((f) => f.riskTier === tier).length;
+                        ? results.length
+                        : results.filter((r) => r.riskTier === tier).length;
                     return (
                       <button
                         key={tier}
@@ -189,7 +194,7 @@ export function DashboardPage() {
 
             {/* ─── Resident table ─────────────────────────────────────────── */}
             <section aria-label="Flagged residents">
-              {filteredFlags.length === 0 ? (
+              {filteredResults.length === 0 ? (
                 <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
                   <ClipboardCheck className="h-10 w-10 text-emerald-400 mb-3" />
                   <p className="text-slate-700 font-semibold">No residents match this filter</p>
@@ -208,10 +213,10 @@ export function DashboardPage() {
                           'Resident',
                           'Unit',
                           'Risk',
-                          'Lease End',
+                          'Days Left',
                           'Rent',
                           'Signals',
-                          'Action',
+                          'Score',
                         ].map((col) => (
                           <th
                             key={col}
@@ -224,11 +229,10 @@ export function DashboardPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredFlags.map((entry) => (
+                      {filteredResults.map((entry) => (
                         <ResidentRow
-                          key={entry.residentId}
+                          key={entry.id}
                           entry={entry}
-                          propertyId={PROPERTY_ID}
                         />
                       ))}
                     </tbody>

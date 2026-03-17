@@ -12,7 +12,7 @@ export const renewalRiskKeys = {
 
 /**
  * Fetches the latest cached renewal risk scores for a property.
- * Returns null data if no calculation has been run yet.
+ * Returns null/undefined data if no calculation has been run yet.
  */
 export function useRenewalRisk(propertyId: string | null) {
   return useQuery({
@@ -28,16 +28,16 @@ export function useRenewalRisk(propertyId: string | null) {
   });
 }
 
-// ─── useCalculateRisk ─────────────────────────────────────────────────────────
+// ─── useRunBatchScoring ───────────────────────────────────────────────────────
 
 /**
- * Triggers a fresh risk calculation for all active residents of a property.
+ * Triggers a fresh batch risk scoring run for all active residents of a property.
  * On success, automatically refreshes the risk scores query.
  */
-export function useCalculateRisk(propertyId: string) {
+export function useRunBatchScoring(propertyId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (asOfDate?: string) => api.calculateRisk(propertyId, asOfDate),
+    mutationFn: (asOfDate?: string) => api.runBatchScoring(propertyId, asOfDate),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: renewalRiskKeys.property(propertyId),
@@ -46,22 +46,13 @@ export function useCalculateRisk(propertyId: string) {
   });
 }
 
-// ─── useTriggerRenewalEvent ───────────────────────────────────────────────────
+// ─── useRetryWebhook ─────────────────────────────────────────────────────────
 
 /**
- * Fires a renewal event for a single resident and queues a webhook delivery.
+ * Manually retries a failed webhook delivery by webhook log ID.
  */
-export function useTriggerRenewalEvent(propertyId: string) {
-  const queryClient = useQueryClient();
+export function useRetryWebhook() {
   return useMutation({
-    mutationFn: ({ residentId, eventType }: { residentId: string; eventType?: string }) =>
-      api.triggerRenewalEvent(propertyId, residentId, eventType),
-    onSuccess: () => {
-      // Optionally refresh the risk list so status updates show immediately
-      void queryClient.invalidateQueries({
-        queryKey: renewalRiskKeys.property(propertyId),
-      });
-    },
-    // Each resident gets its own mutation state — we keep onError in the component
+    mutationFn: (webhookId: string) => api.retryWebhook(webhookId),
   });
 }

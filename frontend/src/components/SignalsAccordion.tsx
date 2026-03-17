@@ -4,26 +4,23 @@ import type { RiskSignals } from '../types/api';
 
 interface SignalsAccordionProps {
   signals: RiskSignals;
-  daysToExpiry: number | null;
-  monthlyRent: number;
-  marketRent: number | null;
 }
 
 interface SignalRow {
   label: string;
   value: boolean;
   detail?: string;
-  invertColor?: boolean; // true = green when true (e.g. "has renewal offer")
 }
 
-export function SignalsAccordion({ signals, daysToExpiry, monthlyRent, marketRent }: SignalsAccordionProps) {
+export function SignalsAccordion({ signals }: SignalsAccordionProps) {
   const [open, setOpen] = useState(false);
 
   const rows: SignalRow[] = [
     {
       label: 'Lease expiring soon',
-      value: signals.daysToExpiryDays <= 90,
-      detail: daysToExpiry !== null ? `${daysToExpiry} days remaining` : 'Unknown',
+      value: signals.daysToExpiry !== null && signals.daysToExpiry <= 90,
+      detail:
+        signals.daysToExpiry !== null ? `${signals.daysToExpiry} days remaining` : 'Unknown',
     },
     {
       label: 'Payment delinquency',
@@ -39,14 +36,9 @@ export function SignalsAccordion({ signals, daysToExpiry, monthlyRent, marketRen
       label: 'Rent below market',
       value: signals.rentGrowthAboveMarket,
       detail:
-        marketRent !== null
-          ? `$${monthlyRent.toFixed(0)}/mo vs $${marketRent.toFixed(0)}/mo market`
+        signals.marketRent !== null
+          ? `$${signals.currentRent.toFixed(0)}/mo vs $${signals.marketRent.toFixed(0)}/mo market`
           : 'Market rent unavailable',
-    },
-    {
-      label: 'Month-to-month lease',
-      value: signals.isMonthToMonth,
-      detail: signals.isMonthToMonth ? 'Can leave with 30-day notice' : 'Fixed-term lease',
     },
   ];
 
