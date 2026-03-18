@@ -13,7 +13,7 @@
 | ORM | Prisma | Type-safe schema + migrations; easier to document; native PostgreSQL features |
 | Runtime | Node.js 20 LTS + TypeScript strict | Project requirement, type safety |
 | Transport | Express 4 + zod validation middleware | Lightweight, well-known, easy to test |
-| Background queue | In-process retry with `node-cron` (MVP) / BullMQ (production path) | See BS-05 |
+| Background queue | In-process `setInterval` polling worker natively | Less robust than Redis, but maximizes portability for MVP without Docker |
 | Multi-tenancy | `property_id` on every table, enforced by query middleware | Row-level isolation without separate schemas |
 | Idempotency | `event_id` unique constraint + DB upsert on webhook delivery | Prevents duplicate RMS deliveries |
 | Concurrency guard | PostgreSQL advisory locks per property during batch run | Prevents duplicate batch jobs |
@@ -200,7 +200,7 @@ tier              → score ≥ 70 = high; 40–69 = medium; < 40 = low
 - [ ] On 5th failure: sets `status = 'dlq'` AND inserts a row in `webhook_dead_letter_queue` atomically (single transaction)
 - [ ] Worker is idempotent: uses `SELECT ... FOR UPDATE SKIP LOCKED` to prevent two worker instances from picking the same row
 - [ ] Worker logs every attempt (structured JSON: `{ event_id, attempt, status, rms_response }`)
-- [ ] MVP implementation: `node-cron` based in-process worker; documented upgrade path to BullMQ for production
+- [ ] MVP implementation: native `setInterval`-based in-process worker; completely decouples from docker overhead without introducing Redis/Cron logic.
 
 **Skills to use:** `bullmq-specialist` · `error-handling-patterns` · `nodejs-backend-patterns` · `postgresql-optimization`
 
@@ -224,21 +224,21 @@ tier              → score ≥ 70 = high; 40–69 = medium; < 40 = low
 
 ## Epic 4 — Infrastructure & Quality
 
-### BS-09 — Local Development Setup with Docker Compose
+### BS-09 — Local Development Setup with NPM Scripts
 
 **As a** developer,  
-**I want** a single `docker-compose up` command to stand up the entire backend and database,  
-**so that** the evaluator can run the system without configuring local PostgreSQL.
+**I want** explicit native npm scripts to stand up the backend and database,  
+**so that** the evaluator can run the system natively without Docker overhead or configuration friction.
 
 #### Acceptance Criteria
-- [ ] `docker-compose.yml` at project root defines: `db` (postgres:16), `backend` (Node.js service)
-- [ ] Environment variables: `DATABASE_URL`, `RMS_ENDPOINT`, `WEBHOOK_SECRET`, `PORT`
-- [ ] `backend` service runs `prisma migrate deploy && node dist/index.js` on start
-- [ ] `npm run seed` (or `docker-compose run backend npm run seed`) runs `seed.sql` against the DB
-- [ ] `backend/README.md` documents every env variable and provides `.env.example`
-- [ ] Health check endpoint: `GET /health` returns `{ status: 'ok', db: 'connected' }` — used by docker healthcheck directive
+- [ ] Development relies purely on native `npm run dev` (removes `docker-compose.yml` entirely).
+- [ ] Database strictly initialized natively via `createdb` (or handled automatically via Prisma deployment).
+- [ ] Environment variables: `DATABASE_URL`, `RMS_ENDPOINT`, `PORT`
+- [ ] `backend` service runs using `nodemon` or `ts-node` directly.
+- [ ] `npm run seed` robustly applies `seed.ts` strictly across local configurations.
+- [ ] `backend/README.md` cleanly lists step-by-step commands to get started natively.
 
-**Skills to use:** `docker-expert` · `nodejs-backend-patterns`
+**Skills to use:** `nodejs-backend-patterns`
 
 ---
 
@@ -299,7 +299,7 @@ Epic 3: Webhooks
   BS-08  GET/POST /webhook/dlq         ← ops visibility
 
 Epic 4: Infrastructure
-  BS-09  Docker Compose local setup
+  BS-09  Native NPM scripts local setup
   BS-10  Seed script
   BS-11  Error handling + docs
 ```

@@ -153,24 +153,11 @@
 
 ---
 
-## Epic 7 — Data Layer
+### FS-02.5 — Custom Filter Tabs
+- [ ] Add filter tabs (`All`, `High`, `Medium`, `Low`) that natively filter the table view instantly.
 
-### FS-07 — Typed API Client
-
-**As a** frontend developer,  
-**I want** a typed API client in `src/lib/api.ts`,  
-**so that** all API calls share consistent error handling, headers, and type safety.
-
-#### Acceptance Criteria
-- [ ] `src/lib/api.ts` exports typed functions:
-  - `calculateRenewalRisk(propertyId: string, asOfDate?: string): Promise<CalculationResponse>`
-  - `getRenewalRisk(propertyId: string): Promise<RiskDashboardResponse>`
-  - `triggerRenewalEvent(propertyId: string, residentId: string): Promise<EventResponse>`
-- [ ] All functions throw a typed `ApiError` class with `{ status: number, message: string }` on non-2xx responses
-- [ ] Base URL comes from `import.meta.env.VITE_API_BASE_URL` (documented in `.env.example`)
-- [ ] Response parsing uses Zod schemas defined in `src/types/api.ts` — runtime validation, not just TS types
-
-**Skills to use:** `react-patterns` · `zod-validation-expert` · `api-design-principles`
+### Epic 7 — Data Layer
+- [ ] Base URL and Property ID securely populated via `import.meta.env.VITE_API_BASE_URL` and `import.meta.env.VITE_PROPERTY_ID`.
 
 ---
 
