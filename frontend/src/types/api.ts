@@ -48,14 +48,16 @@ export type RenewalRiskResponse = z.infer<typeof RenewalRiskResponseSchema>;
 // ─── POST /renewal-risk/batch response ───────────────────────────────────────
 
 export const BatchRiskResponseSchema = z.object({
-  message: z.string(),
   propertyId: z.string(),
-  asOfDate: z.string(),
-  processed: z.number(),
-  highRisk: z.number(),
-  mediumRisk: z.number(),
-  lowRisk: z.number(),
-  webhooksQueued: z.number(),
+  calculatedAt: z.string(),
+  totalResidents: z.number(),
+  flaggedCount: z.number(),
+  riskTiers: z.object({
+    high: z.number(),
+    medium: z.number(),
+    low: z.number()
+  }),
+  flags: z.array(z.any()).optional()
 });
 export type BatchRiskResponse = z.infer<typeof BatchRiskResponseSchema>;
 

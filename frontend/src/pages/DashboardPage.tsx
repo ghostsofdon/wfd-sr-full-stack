@@ -29,8 +29,8 @@ export function DashboardPage() {
   const { mutate: runBatch, isPending: isCalculating } = useRunBatchScoring(PROPERTY_ID);
 
   const handleCalculate = () => {
-    runBatch(undefined, {
-      onSuccess: (result) => setLastBatchAt(result.asOfDate),
+    runBatch('2025-01-02', {
+      onSuccess: (result) => setLastBatchAt(result.calculatedAt),
     });
   };
 
@@ -169,17 +169,16 @@ export function DashboardPage() {
                         key={tier}
                         type="button"
                         onClick={() => setFilter(tier)}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors border ${
-                          filter === tier
-                            ? tier === 'all'
-                              ? 'bg-slate-800 text-white border-slate-800'
-                              : tier === 'high'
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors border ${filter === tier
+                          ? tier === 'all'
+                            ? 'bg-slate-800 text-white border-slate-800'
+                            : tier === 'high'
                               ? 'bg-red-600 text-white border-red-600'
                               : tier === 'medium'
-                              ? 'bg-amber-500 text-white border-amber-500'
-                              : 'bg-emerald-600 text-white border-emerald-600'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                        }`}
+                                ? 'bg-amber-500 text-white border-amber-500'
+                                : 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                          }`}
                         aria-pressed={filter === tier}
                         aria-label={`Filter: ${tier === 'all' ? 'All' : tier} (${count})`}
                       >

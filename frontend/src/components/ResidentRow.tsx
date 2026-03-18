@@ -41,13 +41,12 @@ export function ResidentRow({ entry }: ResidentRowProps) {
         {daysToExpiry !== null ? (
           <>
             <span
-              className={`font-mono text-xs font-medium ${
-                daysToExpiry <= 30
+              className={`font-mono text-xs font-medium ${daysToExpiry <= 30
                   ? 'text-red-600'
                   : daysToExpiry <= 90
-                  ? 'text-amber-600'
-                  : 'text-slate-600'
-              }`}
+                    ? 'text-amber-600'
+                    : 'text-slate-600'
+                }`}
             >
               {daysToExpiry}d
             </span>
@@ -80,7 +79,7 @@ export function ResidentRow({ entry }: ResidentRowProps) {
       {/* Score */}
       <td className="py-4 pl-4 pr-6 text-right">
         <span className="font-mono text-sm font-semibold text-slate-700">
-          {(entry.riskScore * 100).toFixed(0)}
+          {(entry.riskScore).toFixed(0)}
           <span className="text-xs font-normal text-slate-400">/100</span>
         </span>
       </td>

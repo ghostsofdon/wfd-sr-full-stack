@@ -6,12 +6,12 @@ import axios from 'axios';
 import { prisma } from '../lib/prisma';
 
 const RMS_ENDPOINT = process.env.RMS_ENDPOINT || '';
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 5;
 
-/** Exponential backoff: attempt 1=1m, 2=5m, 3=15m */
+/** Exponential backoff: attempt 1=1s, 2=2s, 3=4s, 4=8s, 5=16s */
 function nextRetryDelay(attempt: number): Date {
-  const delays = [60, 300, 900]; // seconds
-  const secs = delays[Math.min(attempt - 1, delays.length - 1)] ?? 900;
+  const delays = [1, 2, 4, 8, 16]; // seconds
+  const secs = delays[Math.min(attempt - 1, delays.length - 1)] ?? 16;
   return new Date(Date.now() + secs * 1000);
 }
 

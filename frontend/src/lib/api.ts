@@ -109,32 +109,29 @@ export const api = {
   },
 
   /**
-   * POST /api/v1/properties/:propertyId/renewal-risk/batch
+   * POST /api/v1/properties/:propertyId/renewal-risk/calculate
    * Triggers a fresh batch risk scoring run.
    */
   runBatchScoring: async (
     propertyId: string,
     asOfDate?: string
   ): Promise<BatchRiskResponse> => {
-    const params = new URLSearchParams();
-    if (asOfDate) params.set('as_of_date', asOfDate);
-    const qs = params.toString();
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const raw: any = await fetchJson<unknown>(
-      `${BASE_URL}/properties/${propertyId}/renewal-risk/batch${qs ? `?${qs}` : ''}`,
-      { method: 'POST' }
+      `${BASE_URL}/properties/${propertyId}/renewal-risk/calculate`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ asOfDate })
+      }
     );
 
     const normalised = {
-      message: raw.message ?? '',
-      propertyId: raw.property_id,
-      asOfDate: raw.as_of_date ?? '',
-      processed: raw.processed ?? 0,
-      highRisk: raw.highRisk ?? raw.high_risk ?? 0,
-      mediumRisk: raw.mediumRisk ?? raw.medium_risk ?? 0,
-      lowRisk: raw.lowRisk ?? raw.low_risk ?? 0,
-      webhooksQueued: raw.webhooksQueued ?? raw.webhooks_queued ?? 0,
+      propertyId: raw.propertyId ?? raw.property_id,
+      calculatedAt: raw.calculatedAt ?? new Date().toISOString(),
+      totalResidents: raw.totalResidents ?? 0,
+      flaggedCount: raw.flaggedCount ?? 0,
+      riskTiers: raw.riskTiers ?? { high: 0, medium: 0, low: 0 },
+      flags: raw.flags ?? []
     };
 
     return BatchRiskResponseSchema.parse(normalised);

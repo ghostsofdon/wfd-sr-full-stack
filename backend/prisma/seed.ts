@@ -1,7 +1,3 @@
-/**
- * Prisma seed script — creates realistic test data for Park Meadows Apartments.
- * Run: `npx prisma db seed` (configured via package.json prisma.seed)
- */
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -9,275 +5,213 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // ─── Property ────────────────────────────────────────────────────────────────
-  const property = await prisma.property.create({
-    data: {
-      name: 'Park Meadows Apartments',
-      address: '123 Main St',
-      city: 'Denver',
-      state: 'CO',
-      zipCode: '80206',
-      status: 'active',
-    },
+  // Reset data before seeding
+  await prisma.$executeRawUnsafe('TRUNCATE properties CASCADE;');
+
+  const sql = `
+WITH property_data AS (
+  INSERT INTO properties (name, address, city, state, zip_code, status)
+  VALUES ('Park Meadows Apartments', '123 Main St', 'Denver', 'CO', '80206', 'active')
+  RETURNING id
+),
+unit_type_data AS (
+  INSERT INTO unit_types (property_id, name, bedrooms, bathrooms, square_footage)
+  SELECT id, '1BR/1BA', 1, 1, 700
+  FROM property_data
+  RETURNING id, property_id
+),
+units_data AS (
+  INSERT INTO units (property_id, unit_type_id, unit_number, floor, status)
+  SELECT
+    ut.property_id,
+    ut.id,
+    (100 + gs.n)::text,
+    FLOOR(gs.n / 10) + 1,
+    'occupied'
+  FROM unit_type_data ut
+  CROSS JOIN generate_series(1, 20) AS gs(n)
+  RETURNING id, property_id, unit_type_id, unit_number
+),
+unit_pricing_data AS (
+  INSERT INTO unit_pricing (unit_id, base_rent, market_rent, effective_date)
+  SELECT id, 1600, 1600, '2025-01-02'::date
+  FROM units_data
+  RETURNING unit_id
+),
+-- Scenario 1: High risk - lease expires in 45 days, no renewal offer, paying on time
+resident_1 AS (
+  INSERT INTO residents (property_id, unit_id, first_name, last_name, email, status)
+  SELECT property_id, id, 'Jane', 'Doe', 'jane.doe@example.com', 'active'
+  FROM units_data WHERE unit_number = '101'
+  RETURNING id, property_id, unit_id
+),
+lease_1 AS (
+  INSERT INTO leases (property_id, resident_id, unit_id, lease_start_date, lease_end_date, monthly_rent, lease_type, status)
+  SELECT property_id, id, unit_id, '2023-01-15', '2025-01-02'::date + INTERVAL '45 days', 1400, 'fixed', 'active'
+  FROM resident_1
+  RETURNING id, property_id, resident_id
+),
+payments_1 AS (
+  INSERT INTO resident_ledger (property_id, resident_id, transaction_type, charge_code, amount, transaction_date)
+  SELECT
+    r.property_id,
+    r.id,
+    'payment',
+    'rent',
+    1400,
+    '2025-01-02'::date - INTERVAL '1 month' * (6 - gs.n)
+  FROM resident_1 r
+  CROSS JOIN generate_series(0, 5) AS gs(n)
+  RETURNING id
+),
+-- Scenario 2: Medium risk - lease expires in 60 days, missed one payment
+resident_2 AS (
+  INSERT INTO residents (property_id, unit_id, first_name, last_name, email, status)
+  SELECT property_id, id, 'John', 'Smith', 'john.smith@example.com', 'active'
+  FROM units_data WHERE unit_number = '102'
+  RETURNING id, property_id, unit_id
+),
+lease_2 AS (
+  INSERT INTO leases (property_id, resident_id, unit_id, lease_start_date, lease_end_date, monthly_rent, lease_type, status)
+  SELECT property_id, id, unit_id, '2023-01-15', '2025-01-02'::date + INTERVAL '60 days', 1500, 'fixed', 'active'
+  FROM resident_2
+  RETURNING id, property_id, resident_id
+),
+payments_2 AS (
+  INSERT INTO resident_ledger (property_id, resident_id, transaction_type, charge_code, amount, transaction_date)
+  SELECT
+    r.property_id,
+    r.id,
+    'payment',
+    'rent',
+    1500,
+    '2025-01-02'::date - INTERVAL '1 month' * (6 - gs.n)
+  FROM resident_2 r
+  CROSS JOIN generate_series(0, 4) AS gs(n) -- Only 5 payments (1 missed)
+  RETURNING id
+),
+-- Scenario 3: Low risk - 6 months left on lease, renewal offer sent
+resident_3 AS (
+  INSERT INTO residents (property_id, unit_id, first_name, last_name, email, status)
+  SELECT property_id, id, 'Alice', 'Johnson', 'alice.johnson@example.com', 'active'
+  FROM units_data WHERE unit_number = '103'
+  RETURNING id, property_id, unit_id
+),
+lease_3 AS (
+  INSERT INTO leases (property_id, resident_id, unit_id, lease_start_date, lease_end_date, monthly_rent, lease_type, status)
+  SELECT property_id, id, unit_id, '2023-06-15', '2025-01-02'::date + INTERVAL '180 days', 1600, 'fixed', 'active'
+  FROM resident_3
+  RETURNING id, property_id, resident_id
+),
+payments_3 AS (
+  INSERT INTO resident_ledger (property_id, resident_id, transaction_type, charge_code, amount, transaction_date)
+  SELECT
+    r.property_id,
+    r.id,
+    'payment',
+    'rent',
+    1600,
+    '2025-01-02'::date - INTERVAL '1 month' * (6 - gs.n)
+  FROM resident_3 r
+  CROSS JOIN generate_series(0, 5) AS gs(n)
+  RETURNING id
+),
+renewal_3 AS (
+  INSERT INTO renewal_offers (property_id, resident_id, lease_id, renewal_start_date, renewal_end_date, proposed_rent, status)
+  SELECT
+    l.property_id,
+    l.resident_id,
+    l.id,
+    '2025-01-02'::date + INTERVAL '180 days',
+    '2025-01-02'::date + INTERVAL '545 days',
+    1650,
+    'pending'
+  FROM lease_3 l
+  RETURNING id
+),
+-- Scenario 4: High risk - Month-to-month
+resident_4 AS (
+  INSERT INTO residents (property_id, unit_id, first_name, last_name, email, status)
+  SELECT property_id, id, 'Bob', 'Williams', 'bob.williams@example.com', 'active'
+  FROM units_data WHERE unit_number = '104'
+  RETURNING id, property_id, unit_id
+),
+lease_4 AS (
+  INSERT INTO leases (property_id, resident_id, unit_id, lease_start_date, lease_end_date, monthly_rent, lease_type, status)
+  SELECT property_id, id, unit_id, '2024-12-01', '2025-01-01', 1450, 'month_to_month', 'active'
+  FROM resident_4
+  RETURNING id, property_id, resident_id
+),
+payments_4 AS (
+  INSERT INTO resident_ledger (property_id, resident_id, transaction_type, charge_code, amount, transaction_date)
+  SELECT
+    r.property_id,
+    r.id,
+    'payment',
+    'rent',
+    1450,
+    '2025-01-02'::date - INTERVAL '1 month' * (6 - gs.n)
+  FROM resident_4 r
+  CROSS JOIN generate_series(0, 5) AS gs(n)
+  RETURNING id
+)
+SELECT id as result FROM property_data;
+  `;
+
+  const results = await prisma.$queryRawUnsafe<{ result: string }[]>(sql);
+  const propertyId = results[0].result;
+
+  const property = await prisma.property.findUnique({
+    where: { id: propertyId },
+    include: { units: true }
   });
-  console.log(`  ✓ Property: ${property.name} (${property.id})`);
 
-  // ─── Unit Type ────────────────────────────────────────────────────────────────
-  const unitType = await prisma.unitType.create({
-    data: {
-      propertyId: property.id,
-      name: '1BR/1BA',
-      bedrooms: 1,
-      bathrooms: 1,
-      squareFootage: 700,
-    },
-  });
+  if (!property) throw new Error('Property not found');
 
-  // ─── Units (20) ───────────────────────────────────────────────────────────────
-  const unitNumbers = Array.from({ length: 20 }, (_, i) => String(101 + i));
-  const units: Array<{ id: string; unitNumber: string }> = [];
+  const BASE_DATE = new Date('2025-01-02T12:00:00Z');
 
-  for (const unitNumber of unitNumbers) {
-    const floor = Math.floor((parseInt(unitNumber) - 101) / 10) + 1;
-    const unit = await prisma.unit.create({
-      data: {
-        propertyId: property.id,
-        unitTypeId: unitType.id,
-        unitNumber,
-        floor,
-        status: 'occupied',
-      },
-    });
-    units.push({ id: unit.id, unitNumber: unit.unitNumber });
-  }
-
-  // Add pricing to all units (base market rent $1,600)
-  for (const unit of units) {
-    await prisma.unitPricing.create({
-      data: {
-        unitId: unit.id,
-        baseRent: 1600,
-        marketRent: 1680, // 5% above base so rent-gap signal can fire
-        effectiveDate: new Date(),
-      },
-    });
-  }
-  console.log(`  ✓ ${units.length} units created with pricing`);
-
-  // Helper to get offset date from today
-  const daysFromNow = (n: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + n);
-    return d;
-  };
-  const daysAgo = (n: number) => daysFromNow(-n);
-
-  // Helper to add monthly payments
-  async function addPayments(
-    propertyId: string,
-    residentId: string,
-    monthlyAmount: number,
-    count: number,
-    startMonthsBack: number = 6
-  ) {
-    for (let i = 0; i < count; i++) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - (startMonthsBack - i));
-      await prisma.residentLedger.create({
-        data: {
-          propertyId,
-          residentId,
-          transactionType: 'payment',
-          chargeCode: 'rent',
-          amount: monthlyAmount,
-          transactionDate: date,
-        },
-      });
-    }
-  }
-
-  async function addCharge(
-    propertyId: string,
-    residentId: string,
-    amount: number,
-    monthsAgo: number
-  ) {
-    const date = new Date();
-    date.setMonth(date.getMonth() - monthsAgo);
-    await prisma.residentLedger.create({
-      data: {
-        propertyId,
-        residentId,
-        transactionType: 'charge',
-        chargeCode: 'rent',
-        amount,
-        transactionDate: date,
-      },
-    });
-  }
-
-  type CreatedResident = Awaited<ReturnType<typeof prisma.resident.create>>;
-
-  interface ResidentScenario {
-    firstName: string;
-    lastName: string;
-    email: string;
-    unitNumber: string;
-    leaseEndOffset: number; // days from today (positive = future)
-    monthlyRent: number;
-    leaseType?: string;
-    paymentCount: number;
-    addDelinquentCharge?: boolean;
-    hasRenewalOffer?: boolean;
-    renewalStatus?: 'pending' | 'accepted' | 'declined';
-  }
-
-  const scenarios: ResidentScenario[] = [
-    // HIGH RISK: expires in 25 days, no offer, delinquent, rent below market ($1,400 vs $1,680)
-    {
-      firstName: 'Jane', lastName: 'Doe', email: 'jane.doe@example.com',
-      unitNumber: '101', leaseEndOffset: 25, monthlyRent: 1400,
-      paymentCount: 5, addDelinquentCharge: true,
-    },
-    // HIGH RISK: expires in 28 days, no offer, rent below market
-    {
-      firstName: 'Carlos', lastName: 'Rivera', email: 'carlos.rivera@example.com',
-      unitNumber: '102', leaseEndOffset: 28, monthlyRent: 1400,
-      paymentCount: 6,
-    },
-    // HIGH RISK: expires in 20 days, no offer, delinquent
-    {
-      firstName: 'Maria', lastName: 'Gonzalez', email: 'maria.g@example.com',
-      unitNumber: '103', leaseEndOffset: 20, monthlyRent: 1500,
-      paymentCount: 4, addDelinquentCharge: true,
-    },
-    // HIGH RISK: MTM — lease already nearly expired
-    {
-      firstName: 'Bob', lastName: 'Williams', email: 'bob.w@example.com',
-      unitNumber: '104', leaseEndOffset: 15, monthlyRent: 1450,
-      leaseType: 'month_to_month', paymentCount: 6,
-    },
-    // MEDIUM RISK: expires in 55 days, missed payment, no offer
-    {
-      firstName: 'John', lastName: 'Smith', email: 'john.smith@example.com',
-      unitNumber: '105', leaseEndOffset: 55, monthlyRent: 1500,
-      paymentCount: 5, addDelinquentCharge: true,
-    },
-    // MEDIUM RISK: expires in 60 days, no offer, rent below market
-    {
-      firstName: 'Diana', lastName: 'Chen', email: 'diana.c@example.com',
-      unitNumber: '106', leaseEndOffset: 60, monthlyRent: 1400,
-      paymentCount: 6,
-    },
-    // MEDIUM RISK: expires in 45 days, has offer but delinquent
-    {
-      firstName: 'Marcus', lastName: 'Johnson', email: 'm.johnson@example.com',
-      unitNumber: '107', leaseEndOffset: 45, monthlyRent: 1550,
-      paymentCount: 4, addDelinquentCharge: true, hasRenewalOffer: true,
-      renewalStatus: 'pending',
-    },
-    // MEDIUM RISK: expires in 70 days, no offer
-    {
-      firstName: 'Priya', lastName: 'Patel', email: 'priya.p@example.com',
-      unitNumber: '108', leaseEndOffset: 70, monthlyRent: 1600,
-      paymentCount: 6,
-    },
-    // LOW RISK: expires in 180 days, has accepted renewal offer
-    {
-      firstName: 'Alice', lastName: 'Johnson', email: 'alice.j@example.com',
-      unitNumber: '109', leaseEndOffset: 180, monthlyRent: 1600,
-      paymentCount: 6, hasRenewalOffer: true, renewalStatus: 'accepted',
-    },
-    // LOW RISK: expires in 200 days, pending offer, all payments on time
-    {
-      firstName: 'Thomas', lastName: 'Lee', email: 't.lee@example.com',
-      unitNumber: '110', leaseEndOffset: 200, monthlyRent: 1600,
-      paymentCount: 6, hasRenewalOffer: true, renewalStatus: 'pending',
-    },
-    // LOW RISK: 9 months left, all good
-    {
-      firstName: 'Sarah', lastName: 'Kim', email: 's.kim@example.com',
-      unitNumber: '111', leaseEndOffset: 270, monthlyRent: 1600,
-      paymentCount: 6,
-    },
-    // LOW RISK
-    {
-      firstName: 'Ryan', lastName: 'Nguyen', email: 'r.nguyen@example.com',
-      unitNumber: '112', leaseEndOffset: 240, monthlyRent: 1600,
-      paymentCount: 6, hasRenewalOffer: true, renewalStatus: 'accepted',
-    },
-  ];
-
-  const createdResidents: CreatedResident[] = [];
-
-  for (const scenario of scenarios) {
-    const unit = units.find((u) => u.unitNumber === scenario.unitNumber);
-    if (!unit) throw new Error(`Unit ${scenario.unitNumber} not found`);
-
-    // Resident
+  const addExtra = async (unitIndex: number, type: 'high' | 'medium' | 'low') => {
+    const targetUnitName = (105 + unitIndex).toString();
+    const unit = property.units.find(u => u.unitNumber === targetUnitName)!;
     const resident = await prisma.resident.create({
-      data: {
-        propertyId: property.id,
-        unitId: unit.id,
-        firstName: scenario.firstName,
-        lastName: scenario.lastName,
-        email: scenario.email,
-        status: 'active',
-      },
+      data: { propertyId, unitId: unit.id, firstName: 'Extra', lastName: 'Resident ' + unitIndex, status: 'active' }
     });
 
-    // Lease
+    let daysEnd = 180;
+    let rent = 1600;
+
+    if (type === 'high') { daysEnd = 25; rent = 1400; }
+    else if (type === 'medium') { daysEnd = 60; rent = 1600; }
+
+    const endDate = new Date(BASE_DATE);
+    endDate.setDate(endDate.getDate() + daysEnd);
+
     const lease = await prisma.lease.create({
-      data: {
-        propertyId: property.id,
-        residentId: resident.id,
-        unitId: unit.id,
-        leaseStartDate: daysAgo(365),
-        leaseEndDate: daysFromNow(scenario.leaseEndOffset),
-        monthlyRent: scenario.monthlyRent,
-        leaseType: scenario.leaseType ?? 'fixed',
-        status: 'active',
-      },
+      data: { propertyId, residentId: resident.id, unitId: unit.id, leaseStartDate: new Date('2024-01-01'), leaseEndDate: endDate, monthlyRent: rent, leaseType: 'fixed', status: 'active' }
     });
 
-    // Payments
-    await addPayments(property.id, resident.id, scenario.monthlyRent, scenario.paymentCount);
+    if (type === 'high' || type === 'medium') {
+      const ninetyDaysAgo = new Date(BASE_DATE);
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-    // Delinquency: add a charge that exceeds payments to create net positive balance
-    if (scenario.addDelinquentCharge) {
-      await addCharge(property.id, resident.id, scenario.monthlyRent, 1);
-      // Only add 1 payment for that month (so net = +rent)
-    }
-
-    // Renewal offer
-    if (scenario.hasRenewalOffer) {
-      await prisma.renewalOffer.create({
-        data: {
-          propertyId: property.id,
-          residentId: resident.id,
-          leaseId: lease.id,
-          renewalStartDate: daysFromNow(scenario.leaseEndOffset),
-          renewalEndDate: daysFromNow(scenario.leaseEndOffset + 365),
-          proposedRent: scenario.monthlyRent * 1.03,
-          status: scenario.renewalStatus ?? 'pending',
-        },
+      await prisma.residentLedger.create({
+        data: { propertyId, residentId: resident.id, transactionType: 'charge', chargeCode: 'rent', amount: rent, transactionDate: ninetyDaysAgo }
       });
+      // no matching payment to make them delinquent!
     }
+  };
 
-    createdResidents.push(resident);
-  }
+  await addExtra(0, 'high');
+  await addExtra(1, 'high');
+  await addExtra(2, 'medium');
+  await addExtra(3, 'medium');
+  await addExtra(4, 'medium');
+  for (let i = 5; i < 11; i++) await addExtra(i, 'low');
 
-  console.log(`  ✓ ${createdResidents.length} residents with leases and ledger entries`);
   console.log(`
-╔══════════════════════════════════════════╗
-║  Seed complete!                          ║
-║                                          ║
-║  Property ID: ${property.id.slice(0, 8)}...            ║
-║  Copy the full property ID above to      ║
-║  use in API calls and the dashboard.     ║
-╚══════════════════════════════════════════╝
-
-  Full Property ID: ${property.id}
+Seed complete (with exact matches)!
+Property ID: ${propertyId.slice(0, 8)}...
+Full Property ID: ${propertyId}
   `);
 }
 
