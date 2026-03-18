@@ -63,8 +63,7 @@ export function calculateRiskScore(inputs: RiskInputs): RiskResult {
     if (inputs.marketRent > inputs.currentRent * 1.05) rentRisk = 100;
   }
 
-  // Weighted sum exactly as outlined in renewal_risk_takehome.md
-  // 40% Days, 25% Delinquent, 20% Offer, 15% Rent
+  // Weighted sum (40% Days, 25% Delinquent, 20% Offer, 15% Rent)
   const daysComponent = daysRisk * 0.40;
   const paymentComponent = delinqRisk * 0.25;
   const offerComponent = offerRisk * 0.20;

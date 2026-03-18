@@ -152,8 +152,6 @@ export async function runBatchScoring(propertyId: string, asOfDate?: Date) {
 async function getDelinquentResidents(propertyId: string, residentIds: string[]): Promise<Set<string>> {
   if (residentIds.length === 0) return new Set();
 
-  // Since the provided seed script only inserts `payment` records, we define delinquency 
-  // as having fewer than 6 valid payments recorded in the ledger.
   const rows = await prisma.residentLedger.groupBy({
     by: ['residentId'],
     where: { propertyId, residentId: { in: residentIds }, transactionType: 'payment' },
