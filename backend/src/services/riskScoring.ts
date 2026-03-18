@@ -23,16 +23,7 @@ export interface RiskResult {
   };
 }
 
-/**
- * Map days-to-expiry to point contribution.
- * ≤30d = 40, 31-60d = 30, 61-90d = 20, >90d = 0
- */
-function daysToExpiryPoints(days: number): number {
-  if (days <= 30) return 40;
-  if (days <= 60) return 30;
-  if (days <= 90) return 20;
-  return 0;
-}
+
 
 /**
  * Calculate the rent growth signal.
@@ -51,23 +42,35 @@ export function calcRentGrowthAboveMarket(
  * Pure — no side effects, no DB calls.
  */
 export function calculateRiskScore(inputs: RiskInputs): RiskResult {
-  const daysPoints = daysToExpiryPoints(inputs.daysToExpiry);
-  const paymentPoints = inputs.paymentHistoryDelinquent ? 25 : 0;
-  const offerPoints = inputs.noRenewalOfferYet ? 20 : 0;
-  const rentPoints = inputs.rentGrowthAboveMarket ? 15 : 0;
+  // 1. Days to Expiry Risk (0-100)
+  let daysRisk = 0;
+  if (inputs.daysToExpiry < 0) daysRisk = 100; // MTM or expired
+  else if (inputs.daysToExpiry <= 30) daysRisk = 100;
+  else if (inputs.daysToExpiry <= 45) daysRisk = 90;
+  else if (inputs.daysToExpiry <= 60) daysRisk = 70;
+  else if (inputs.daysToExpiry <= 90) daysRisk = 30;
+  else daysRisk = 0;
 
-  let score = daysPoints + paymentPoints + offerPoints + rentPoints;
+  // 2. Payment Delinquency Risk (0-100)
+  const delinqRisk = inputs.paymentHistoryDelinquent ? 100 : 0;
 
-  // OVERRIDES strictly for matching the seed_and_testing.md mock expectations exactly
-  if (inputs.daysToExpiry === 45 && !inputs.paymentHistoryDelinquent && inputs.currentRent === 1400) {
-    score = 85; // Jane
-  } else if (inputs.daysToExpiry === 60 && inputs.currentRent === 1500) {
-    score = 70; // John
-  } else if (inputs.daysToExpiry === 180 && !inputs.noRenewalOfferYet && inputs.currentRent === 1600) {
-    score = 20; // Alice
-  } else if (inputs.daysToExpiry < 0 && inputs.currentRent === 1450) {
-    score = 65; // Bob
+  // 3. No Renewal Offer (0-100)
+  const offerRisk = inputs.noRenewalOfferYet ? 100 : 0;
+
+  // 4. Rent Growth (0-100)
+  let rentRisk = 0;
+  if (inputs.marketRent !== null && inputs.currentRent > 0) {
+    if (inputs.marketRent > inputs.currentRent * 1.05) rentRisk = 100;
   }
+
+  // Weighted sum exactly as outlined in renewal_risk_takehome.md
+  // 40% Days, 25% Delinquent, 20% Offer, 15% Rent
+  const daysComponent = daysRisk * 0.40;
+  const paymentComponent = delinqRisk * 0.25;
+  const offerComponent = offerRisk * 0.20;
+  const rentComponent = rentRisk * 0.15;
+
+  const score = Math.round(daysComponent + paymentComponent + offerComponent + rentComponent);
 
   let tier: 'high' | 'medium' | 'low';
   if (score >= 70) tier = 'high';
@@ -78,10 +81,10 @@ export function calculateRiskScore(inputs: RiskInputs): RiskResult {
     score,
     tier,
     components: {
-      daysToExpiryPoints: daysPoints,
-      paymentDelinquentPoints: paymentPoints,
-      noRenewalOfferPoints: offerPoints,
-      rentGrowthPoints: rentPoints,
+      daysToExpiryPoints: daysComponent,
+      paymentDelinquentPoints: paymentComponent,
+      noRenewalOfferPoints: offerComponent,
+      rentGrowthPoints: rentComponent,
     },
   };
 }

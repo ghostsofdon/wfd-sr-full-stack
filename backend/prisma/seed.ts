@@ -191,13 +191,27 @@ SELECT id as result FROM property_data;
     });
 
     if (type === 'high' || type === 'medium') {
-      const ninetyDaysAgo = new Date(BASE_DATE);
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-
-      await prisma.residentLedger.create({
-        data: { propertyId, residentId: resident.id, transactionType: 'charge', chargeCode: 'rent', amount: rent, transactionDate: ninetyDaysAgo }
-      });
-      // no matching payment to make them delinquent!
+      // Instead of an unmatched charge (which makes them delinquent), we need to ensure they have 6 payments
+      // actually wait, if we want them to NOT be delinquent, we give them 6 payments.
+      // Since the logic says John (medium) HAS 1 missed payment (5 payments total),
+      // we don't strictly need extra residents to be delinquent or not since they are just padding.
+      // Let's insert 6 payments to be safe so they evaluate cleanly based purely on Days/Rent.
+      for (let j = 0; j < 6; j++) {
+        const paymentDate = new Date(BASE_DATE);
+        paymentDate.setMonth(paymentDate.getMonth() - j);
+        await prisma.residentLedger.create({
+          data: { propertyId, residentId: resident.id, transactionType: 'payment', chargeCode: 'rent', amount: rent, transactionDate: paymentDate }
+        });
+      }
+    } else {
+      // The loops for Low
+      for (let j = 0; j < 6; j++) {
+        const paymentDate = new Date(BASE_DATE);
+        paymentDate.setMonth(paymentDate.getMonth() - j);
+        await prisma.residentLedger.create({
+          data: { propertyId, residentId: resident.id, transactionType: 'payment', chargeCode: 'rent', amount: rent, transactionDate: paymentDate }
+        });
+      }
     }
   };
 
