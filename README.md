@@ -19,10 +19,14 @@ wfd-sr-full-stack/
 
 | Concern | Solution |
 |---|---|
-| Risk scoring | Weighted signal engine (`riskScore` in [0,1]) → tiered as *high / medium / low* |
-| Webhook delivery | Persistent `WebhookDeliveryLog` table, exponential back-off worker, dead-letter queue after 3 failures |
+| Risk scoring | Formula-based weighted signal engine (40% Days, 25% Delinquency, 20% Offer, 15% Rent) → tiered automatically |
+| Webhook delivery | Persistent `WebhookDeliveryLog` table, background retry exponential back-off worker (1s, 2s, 4s, 8s, 16s), dead-letter queue after 5 failures |
 | Type safety | Zod schemas at API boundaries — shared between runtime validation and TS inference |
-| Data freshness | Scores are recalculated on-demand via `POST /renewal-risk/batch` and cached in DB |
+| Data freshness | Scores are recalculated on-demand via `POST /properties/:id/renewal-risk/calculate` and cached in DB |
+
+### Tradeoffs
+* **Async vs Sync Webhooks:** Currently, the first webhook attempt processes synchronously in the API request to guarantee immediate Delivery attempts. A message queue (like BullMQ + Redis) would be better for high scale, but keeping it inside Postgres with a background retry polling worker simplifies deployment while respecting ACID semantics for this assessment.
+* **Query Performance:** We decoupled the risk signal calculations from the property dashboard fetching query (`GET /renewal-risk`). This avoids expensive JOIN calculations when rendering the frontend table.
 
 ---
 
@@ -86,3 +90,12 @@ See [`backend/README.md`](./backend/README.md) for full API documentation.
 2. Run `POST /api/v1/properties/:id/renewal-risk/batch`.
 3. High- and medium-risk events are dispatched to your endpoint.
 4. The delivery log is visible via `GET /api/v1/properties/:id/webhooks` and in the dashboard Webhook panel.
+
+---
+
+## Agentic Development & Tradeoffs
+
+This project heavily leverages AI assistance (specifically an autonomous Google DeepMind AI coding agent processing commands directly inside the IDE) to orchestrate and implement logic rapidly:
+
+* **What AI did well:** Scaffolding the React dashboard framework, defining the fundamental Zod TS schemas, seeding dummy boilerplate records, and mocking the database schema models.
+* **What required architectural refinement:** The backend logic surrounding edge cases (like timestamps generating duplicates in Upsert), and carefully calibrating the mathematics underlying the Risk Scoring Engine to reliably process missing "charges" as delinquent simply based on missing "payments". The backend also required surgical edits to precisely configure the exponential backoff timing rules (1s, 2s, 4s...) rather than relying on default generic background-job polling delays. 
