@@ -91,7 +91,6 @@ async function main() {
           chargeCode: 'rent',
           amount: monthlyAmount,
           transactionDate: date,
-          description: `Rent payment M-${startMonthsBack - i}`,
         },
       });
     }
@@ -113,7 +112,6 @@ async function main() {
         chargeCode: 'rent',
         amount,
         transactionDate: date,
-        description: `Rent charge M-${monthsAgo}`,
       },
     });
   }

@@ -1,0 +1,23 @@
+# Dependency folders
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build artifacts
+dist/
+backend/dist/
+frontend/dist/
+
+# Environment and Logs
+.env
+.env.local
+*.log
+.git/
+
+# Prisma artifacts (can be heavy if many migrations exist)
+backend/prisma/migrations/
+
+# Stop the agent from reading the massive lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

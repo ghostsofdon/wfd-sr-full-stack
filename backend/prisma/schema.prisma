@@ -13,7 +13,7 @@ datasource db {
 // ─── Core schema (mirrors starter_schema.sql) ───────────────────────────────
 
 model Property {
-  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name      String   @unique @db.VarChar(255)
   address   String?  @db.VarChar(500)
   city      String?  @db.VarChar(100)
@@ -37,7 +37,7 @@ model Property {
 }
 
 model UnitType {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   propertyId    String   @map("property_id") @db.Uuid
   name          String   @db.VarChar(100)
   bedrooms      Int?
@@ -53,7 +53,7 @@ model UnitType {
 }
 
 model Unit {
-  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   propertyId   String   @map("property_id") @db.Uuid
   unitTypeId   String   @map("unit_type_id") @db.Uuid
   unitNumber   String   @map("unit_number") @db.VarChar(50)
@@ -75,7 +75,7 @@ model Unit {
 }
 
 model UnitPricing {
-  id            String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   unitId        String   @map("unit_id") @db.Uuid
   baseRent      Decimal  @map("base_rent") @db.Decimal(10, 2)
   marketRent    Decimal  @map("market_rent") @db.Decimal(10, 2)
@@ -91,7 +91,7 @@ model UnitPricing {
 }
 
 model Resident {
-  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   propertyId  String    @map("property_id") @db.Uuid
   unitId      String    @map("unit_id") @db.Uuid
   firstName   String    @map("first_name") @db.VarChar(100)
@@ -119,7 +119,7 @@ model Resident {
 }
 
 model Lease {
-  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   propertyId     String   @map("property_id") @db.Uuid
   residentId     String   @map("resident_id") @db.Uuid
   unitId         String   @map("unit_id") @db.Uuid
@@ -145,7 +145,7 @@ model Lease {
 }
 
 model ResidentLedger {
-  id              String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   propertyId      String   @map("property_id") @db.Uuid
   residentId      String   @map("resident_id") @db.Uuid
   transactionType String   @map("transaction_type") @db.VarChar(50)
@@ -165,7 +165,7 @@ model ResidentLedger {
 }
 
 model RenewalOffer {
-  id                 String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   propertyId         String    @map("property_id") @db.Uuid
   residentId         String    @map("resident_id") @db.Uuid
   leaseId            String    @map("lease_id") @db.Uuid
@@ -190,7 +190,7 @@ model RenewalOffer {
 // ─── Candidate tables ────────────────────────────────────────────────────────
 
 model RenewalRiskScore {
-  id           String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   propertyId   String   @map("property_id") @db.Uuid
   residentId   String   @map("resident_id") @db.Uuid
   leaseId      String   @map("lease_id") @db.Uuid
@@ -218,7 +218,7 @@ model RenewalRiskScore {
 }
 
 model RiskSignal {
-  id                       String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   riskScoreId              String   @unique @map("risk_score_id") @db.Uuid
   propertyId               String   @map("property_id") @db.Uuid
   residentId               String   @map("resident_id") @db.Uuid
@@ -239,7 +239,7 @@ model RiskSignal {
 }
 
 model WebhookDeliveryLog {
-  id               String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   eventId          String    @unique @map("event_id") @db.VarChar(255)
   propertyId       String    @map("property_id") @db.Uuid
   residentId       String    @map("resident_id") @db.Uuid
@@ -266,7 +266,7 @@ model WebhookDeliveryLog {
 }
 
 model WebhookDeadLetterQueue {
-  id                   String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   webhookDeliveryLogId String   @unique @map("webhook_delivery_log_id") @db.Uuid
   reason               String   @db.Text
   movedAt              DateTime @default(now()) @map("moved_at")
